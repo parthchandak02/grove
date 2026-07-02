@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>grove — bioluminescent daylight forest</title>
+<style>
+:root {
+  --motion-fast: 160ms;
+  --motion-base: 240ms;
+  --motion-slow: 360ms;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --bg: #0a0f0d;
+  --layer: #0f1a14;
+  --accent1: #2e7d32;
+  --accent2: #4caf50;
+  --accent3: #76ff03;
+  --biolume: #b2ff59;
+  --text: rgba(255, 255, 255, 0.5);
+  --label: rgba(255, 255, 255, 0.7);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#chrome {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+#hero {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  text-align: right;
+  pointer-events: none;
+}
+
+#hero-value {
+  font-size: 48px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+  color: var(--biolume);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 24px rgba(118, 255, 3, 0.35);
+}
+
+#hero-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  margin-top: 0.35rem;
+  opacity: 0.45;
+}
+
+#legend {
+  position: absolute;
+  top: 1.25rem;
+  left: 1.25rem;
+  max-width: 200px;
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--text);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+#legend h2 {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--label);
+  margin-bottom: 0.4rem;
+}
+
+#legend li {
+  list-style: none;
+  padding-left: 0.75rem;
+  position: relative;
+  margin-bottom: 0.2rem;
+}
+
+#legend li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent3);
+  opacity: 0.7;
+}
+
+#quiet-zone {
+  position: absolute;
+  left: 50%;
+  bottom: 4.5rem;
+  transform: translateX(-50%) translateY(12px);
+  min-width: min(280px, calc(100vw - 2rem));
+  max-width: 340px;
+  padding: 1rem 1.15rem;
+  background: rgba(15, 26, 20, 0.88);
+  border: 1px solid rgba(46, 125, 50, 0.55);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--motion-slow) var(--ease-out-expo),
+              transform var(--motion-slow) var(--ease-out-expo),
+              visibility var(--motion-slow);
+  pointer-events: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 20px rgba(118, 255, 3, 0.06);
+}
+
+#quiet-zone.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+#quiet-zone.idle-fade {
+  opacity: 0.1;
+}
+
+#quiet-zone .city {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--label);
+  margin-bottom: 0.35rem;
+}
+
+#quiet-zone .day-hero {
+  font-size: 28px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  color: var(--biolume);
+  margin-bottom: 0.5rem;
+}
+
+#quiet-zone .times {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+#quiet-zone .desc-line {
+  font-size: 11px;
+  margin-top: 0.55rem;
+  color: var(--text);
+  opacity: 0.5;
+  font-style: italic;
+}
+
+#desc {
+  position: absolute;
+  bottom: 2.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.35;
+  max-width: 90vw;
+  pointer-events: none;
+}
+
+#data-stamp {
+  position: absolute;
+  bottom: 0.65rem;
+  left: 0.75rem;
+  font-size: 10px;
+  color: var(--text);
+  opacity: 0.4;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="chrome">
+  <div id="hero">
+    <div id="hero-value">—</div>
+    <div id="hero-label">hours of daylight</div>
+  </div>
+
+  <ul id="legend">
+    <h2>Encoding</h2>
+    <li>Taller trunk → more daylight today</li>
+    <li>Glow intensity → time of day (peak at solar noon)</li>
+  </ul>
+
+  <div id="quiet-zone" role="dialog" aria-live="polite">
+    <div class="city" id="qz-city"></div>
+    <div class="day-hero" id="qz-day"></div>
+    <div class="times" id="qz-times"></div>
+    <div class="desc-line" id="qz-desc"></div>
+  </div>
+
+  <div id="desc">Five world cities grow as bioluminescent trees, shaped by today's real sunlight</div>
+  <div id="data-stamp">Sunrise-Sunset API · updated — · fallback</div>
+</div>
+
+<script>
+const C = {
+  NUMBER_OF_TREES: 5,
+  TREE_X_MIN: 100,
+  TREE_X_MAX: 900,
+  GROUND_Y_RATIO: 0.86,
+  SNAP_THRESHOLD: 48,
+  PARTICLE_TOTAL_MIN: 15,
+  PARTICLE_TOTAL_MAX: 25,
+  IDLE_FADE_MS: 3000,
+  PULSE_STAGGER_MS: 300,
+  SWAY_AMPLITUDE: 0.018,
+  SWAY_SPEED: 0.00075,
+  PULSE_SPEED: 0.0012,
+  HOVER_RADIUS: 55,
+  GLOW_BLUR_MAX: 30,
+  MAX_GLOW_ENTITIES: 25,
+  TRUNK_H_MIN: 80,
+  TRUNK_H_MAX: 200,
+  DAY_LENGTH_IN_MIN: 28800,
+  DAY_LENGTH_IN_MAX: 57600,
+  BRANCH_IN_MIN: 43200,
+  BRANCH_IN_MAX: 57600,
+  BRANCH_COUNT_MIN: 2,
+  BRANCH_COUNT_MAX: 6,
+  LEAN_IN_MIN: 10,
+  LEAN_IN_MAX: 14,
+  LEAN_DEG_MIN: -5,
+  LEAN_DEG_MAX: 5,
+  PARTICLE_GLOW_MIN: 10,
+  PARTICLE_GLOW_MAX: 25,
+  PARTICLE_COUNT_MIN: 5,
+  PARTICLE_COUNT_MAX: 15,
+};
+
+const PALETTE = {
+  bg: '#0a0f0d',
+  layer: '#0f1a14',
+  accent1: '#2e7d32',
+  accent2: '#4caf50',
+  accent3: '#76ff03',
+  biolume: '#b2ff59',
+  text: 'rgba(255,255,255,0.5)',
+  label: 'rgba(255,255,255,0.7)',
+  glowAlpha: 'rgba(118,255,3,0.08)',
+};
+
+const STROKE = { hair: 0.5, fine: 1, medium: 2, heavy: 4 };
+const ALPHA = { bg: 0.08, field: 0.25, active: 0.7, label: 0.45 };
+
+const CITIES = [
+  { name: 'San Francisco', lat: 37.7749, lng: -122.4194, fallbackDayLength: 50400 },
+  { name: 'Tokyo', lat: 35.6762, lng: 139.6503, fallbackDayLength: 36000 },
+  { name: 'London', lat: 51.5074, lng: -0.1278, fallbackDayLength: 57600 },
+  { name: 'Sydney', lat: -33.8688, lng: 151.2093, fallbackDayLength: 36000 },
+  { name: 'Dubai', lat: 25.2048, lng: 55.2708, fallbackDayLength: 46800 },
+];
+
+function mapToRange(value, inMin, inMax, outMin, outMax) {
+  const t = Math.max(0, Math.min(1, (value - inMin) / (inMax - inMin)));
+  return outMin + t * (outMax - outMin);
+}
+
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+function formatHoursMin(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
+
+function formatTime(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return '—';
+  }
+}
+
+function solarHour(iso) {
+  const d = new Date(iso);
+  return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+}
+
+function makeFallbackTree(city, index) {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+  const sunrise = new Date(y, m, d, 6, 15 + index * 8, 0);
+  const sunset = new Date(sunrise.getTime() + city.fallbackDayLength * 1000);
+  const solarNoon = new Date(sunrise.getTime() + city.fallbackDayLength * 500);
+  return {
+    name: city.name,
+    dayLength: city.fallbackDayLength,
+    sunrise: sunrise.toISOString(),
+    sunset: sunset.toISOString(),
+    solarNoon: solarNoon.toISOString(),
+    isFallback: true,
+  };
+}
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const heroValue = document.getElementById('hero-value');
+const quietZone = document.getElementById('quiet-zone');
+const qzCity = document.getElementById('qz-city');
+const qzDay = document.getElementById('qz-day');
+const qzTimes = document.getElementById('qz-times');
+const qzDesc = document.getElementById('qz-desc');
+const dataStamp = document.getElementById('data-stamp');
+
+let dpr = 1;
+let W = 0;
+let H = 0;
+let groundY = 0;
+let trees = [];
+let particles = [];
+let selectedIndex = -1;
+let hoverIndex = -1;
+let isLive = false;
+let lastUpdated = null;
+let idleTimer = null;
+let tapping = false;
+let mouseX = -1;
+let mouseY = -1;
+let startTime = performance.now();
+let firstVisitPulses = CITIES.map((_, i) => ({ active: true, start: i * C.PULSE_STAGGER_MS }));
+let animationId = null;
+
+function treeX(index) {
+  const t = index / (C.NUMBER_OF_TREES - 1);
+  const minX = mapToRange(W, 320, 1200, 40, C.TREE_X_MIN);
+  const maxX = mapToRange(W, 320, 1200, W - 40, C.TREE_X_MAX);
+  return minX + t * (maxX - minX);
+}
+
+function computeTreeMetrics(tree, index) {
+  const x = treeX(index);
+  const trunkH = mapToRange(tree.dayLength, C.DAY_LENGTH_IN_MIN, C.DAY_LENGTH_IN_MAX, C.TRUNK_H_MIN, C.TRUNK_H_MAX);
+  const sunriseMs = new Date(tree.sunrise).getTime();
+  const sunsetMs = new Date(tree.sunset).getTime();
+  const daylightDuration = Math.max(0, (sunsetMs - sunriseMs) / 1000);
+  const branchCount = Math.round(mapToRange(daylightDuration, C.BRANCH_IN_MIN, C.BRANCH_IN_MAX, C.BRANCH_COUNT_MIN, C.BRANCH_COUNT_MAX));
+  const leanDeg = mapToRange(solarHour(tree.solarNoon), C.LEAN_IN_MIN, C.LEAN_IN_MAX, C.LEAN_DEG_MIN, C.LEAN_DEG_MAX);
+  const canopyW = 20 + branchCount * 8;
+  const bottomY = groundY;
+  const topY = bottomY - trunkH;
+  return {
+    ...tree,
+    index,
+    x,
+    trunkH,
+    branchCount: Math.max(C.BRANCH_COUNT_MIN, Math.min(C.BRANCH_COUNT_MAX, branchCount)),
+    leanDeg,
+    canopyW,
+    bottomY,
+    topY,
+    daylightDuration,
+    hitLeft: x - canopyW * 0.6,
+    hitRight: x + canopyW * 0.6,
+    hitTop: topY - 20,
+    hitBottom: bottomY,
+  };
+}
+
+function biolumeFactor(tree) {
+  const now = Date.now();
+  const sunrise = new Date(tree.sunrise).getTime();
+  const sunset = new Date(tree.sunset).getTime();
+  const noon = new Date(tree.solarNoon).getTime();
+  if (now <= sunrise || now >= sunset) return 0.15;
+  if (now <= noon) {
+    return mapToRange(now, sunrise, noon, 0.35, 1);
+  }
+  return mapToRange(now, noon, sunset, 1, 0.35);
+}
+
+function buildParticles() {
+  particles = [];
+  const total = Math.round(mapToRange(
+    trees.reduce((s, t) => s + biolumeFactor(t), 0) / trees.length,
+    0.2, 1, C.PARTICLE_TOTAL_MIN, C.PARTICLE_TOTAL_MAX
+  ));
+  let assigned = 0;
+  trees.forEach((tree, ti) => {
+    const factor = biolumeFactor(tree);
+    const count = Math.max(1, Math.round(total * (factor / trees.reduce((s, t) => s + biolumeFactor(t), 0.001))));
+    for (let i = 0; i < count && assigned < C.MAX_GLOW_ENTITIES; i++, assigned++) {
+      const angle = (ti * 2.399963 + i * 1.618033) % (Math.PI * 2);
+      const dist = 8 + ((ti * 7 + i * 13) % 40);
+      const px = tree.x + Math.cos(angle) * dist * (0.6 + factor * 0.4);
+      const py = tree.topY + 15 + Math.sin(angle) * dist * 0.5;
+      const glowR = mapToRange(factor, 0.2, 1, C.PARTICLE_GLOW_MIN, C.PARTICLE_GLOW_MAX);
+      particles.push({ x: px, y: py, treeIndex: ti, phase: (ti + i) * 0.7, glowR, factor });
+    }
+  });
+}
+
+function rebuildTrees() {
+  trees = trees.map((t, i) => computeTreeMetrics(t, i));
+  trees.sort((a, b) => b.canopyW - a.canopyW);
+  buildParticles();
+}
+
+function setTreeData(rawTrees, live) {
+  trees = rawTrees;
+  isLive = live;
+  lastUpdated = new Date();
+  rebuildTrees();
+  updateDataStamp();
+  if (selectedIndex < 0) updateHeroAverage();
+  else updateHeroFromTree(trees.find(t => t.index === selectedIndex) || trees[0]);
+  drawFrame(performance.now() - startTime);
+}
+
+function updateDataStamp() {
+  const timeStr = lastUpdated
+    ? lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : '—';
+  const mode = isLive ? 'live' : 'fallback';
+  dataStamp.textContent = `Sunrise-Sunset API · updated ${timeStr} · ${mode}`;
+}
+
+function updateHeroAverage() {
+  const avg = trees.reduce((s, t) => s + t.dayLength, 0) / trees.length;
+  heroValue.textContent = formatHoursMin(avg);
+}
+
+function updateHeroFromTree(tree) {
+  heroValue.textContent = formatHoursMin(tree.dayLength);
+}
+
+function showQuietZone(tree) {
+  clearTimeout(idleTimer);
+  quietZone.classList.remove('idle-fade');
+  quietZone.classList.add('visible');
+  qzCity.textContent = tree.name;
+  qzDay.textContent = formatDuration(tree.dayLength);
+  qzTimes.innerHTML =
+    `Sunrise ${formatTime(tree.sunrise)}<br>` +
+    `Solar noon ${formatTime(tree.solarNoon)}<br>` +
+    `Sunset ${formatTime(tree.sunset)}`;
+  qzDesc.textContent = `How much daylight ${tree.name} gets today`;
+  idleTimer = setTimeout(() => quietZone.classList.add('idle-fade'), C.IDLE_FADE_MS);
+}
+
+function hideQuietZone() {
+  clearTimeout(idleTimer);
+  quietZone.classList.remove('visible', 'idle-fade');
+}
+
+function getClosestTree(tapX, tapY) {
+  for (const tree of trees) {
+    if (tapX >= tree.hitLeft && tapX <= tree.hitRight && tapY >= tree.hitTop && tapY <= tree.hitBottom) {
+      return tree;
+    }
+  }
+  let best = null;
+  let bestDist = Infinity;
+  for (const tree of trees) {
+    const dx = tapX - tree.x;
+    const dy = tapY - (tree.topY + tree.trunkH * 0.4);
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < C.SNAP_THRESHOLD && d < bestDist) {
+      bestDist = d;
+      best = tree;
+    }
+  }
+  return best;
+}
+
+function handlePointer(x, y) {
+  const tree = getClosestTree(x, y);
+  if (tree) {
+    selectedIndex = tree.index;
+    updateHeroFromTree(tree);
+    showQuietZone(tree);
+  } else {
+    selectedIndex = -1;
+    hideQuietZone();
+    updateHeroAverage();
+  }
+}
+
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = Math.floor(W * dpr);
+  canvas.height = Math.floor(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  groundY = H * C.GROUND_Y_RATIO;
+  if (trees.length) rebuildTrees();
+}
+
+function drawBackground() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#060a08');
+  g.addColorStop(0.45, PALETTE.bg);
+  g.addColorStop(1, '#0c1510');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  const mist = ctx.createRadialGradient(W * 0.5, H * 0.55, 0, W * 0.5, H * 0.55, W * 0.7);
+  mist.addColorStop(0, 'rgba(46,125,50,0.04)');
+  mist.addColorStop(1, 'rgba(10,15,13,0)');
+  ctx.fillStyle = mist;
+  ctx.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < 6; i++) {
+    const y = H * (0.15 + i * 0.12);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.bezierCurveTo(W * 0.25, y - 18, W * 0.75, y + 18, W, y);
+    ctx.strokeStyle = `rgba(46,125,50,${ALPHA.bg})`;
+    ctx.lineWidth = STROKE.hair;
+    ctx.stroke();
+  }
+}
+
+function swayOffset(tree, depth, time) {
+  const phase = tree.index * 1.3 + depth * 0.8;
+  return Math.sin(time * C.SWAY_SPEED + phase) * C.SWAY_AMPLITUDE * (1 + depth * 0.4) * tree.trunkH;
+}
+
+function drawBranchSegment(x0, y0, x1, y1, width, color, alpha) {
+  const mx = (x0 + x1) / 2;
+  const my = (y0 + y1) / 2;
+  const cx = mx + (y1 - y0) * 0.15;
+  const cy = my - (x1 - x0) * 0.15;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.quadraticCurveTo(cx, cy, x1, y1);
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawCanopyDots(cx, cy, count, glow, time, tree) {
+  const n = Math.min(count, 8);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + time * 0.0003;
+    const r = 4 + (i % 3) * 3;
+    const px = cx + Math.cos(a) * r;
+    const py = cy + Math.sin(a) * r * 0.6;
+    ctx.beginPath();
+    ctx.arc(px, py, 2 + glow * 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = PALETTE.accent3;
+    ctx.globalAlpha = ALPHA.field + glow * 0.35;
+    if (glow > 0.5) {
+      ctx.shadowColor = PALETTE.accent3;
+      ctx.shadowBlur = mapToRange(glow, 0.5, 1, 12, C.GLOW_BLUR_MAX);
+    }
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawTree(tree, time) {
+  const { x, trunkH, branchCount, leanDeg, bottomY } = tree;
+  const leanRad = (leanDeg * Math.PI) / 180;
+  const sway = swayOffset(tree, 0, time);
+  const topX = x + Math.sin(leanRad) * trunkH * 0.15 + sway;
+  const topY = bottomY - trunkH;
+
+  const isHover = hoverIndex === tree.index;
+  const isSelected = selectedIndex === tree.index;
+  const glow = biolumeFactor(tree);
+  const pulse = firstVisitPulses[tree.index];
+  let pulseScale = 1;
+  if (pulse && pulse.active) {
+    const elapsed = time - pulse.start;
+    if (elapsed > 2000) {
+      pulse.active = false;
+    } else {
+      pulseScale = 1 + Math.sin(elapsed * C.PULSE_SPEED * 8) * 0.15 * (1 - elapsed / 2000);
+    }
+  }
+
+  ctx.save();
+  if (isHover || isSelected) {
+    ctx.shadowColor = PALETTE.accent3;
+    ctx.shadowBlur = isSelected ? 22 : 14;
+  }
+
+  const cpX = x + sway * 0.5 + Math.sin(leanRad) * trunkH * 0.08;
+  const cpY = bottomY - trunkH * 0.55;
+  ctx.beginPath();
+  ctx.moveTo(x, bottomY);
+  ctx.bezierCurveTo(x - 3 + sway * 0.3, bottomY - trunkH * 0.35, cpX, cpY, topX, topY);
+  const grad = ctx.createLinearGradient(x, bottomY, topX, topY);
+  grad.addColorStop(0, PALETTE.accent1);
+  grad.addColorStop(1, PALETTE.accent2);
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = STROKE.heavy;
+  ctx.lineCap = 'round';
+  ctx.globalAlpha = ALPHA.active;
+  ctx.stroke();
+  ctx.lineWidth = STROKE.fine;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+
+  const branches = [];
+  const mainCount = Math.min(2, branchCount);
+  for (let b = 0; b < mainCount; b++) {
+    const side = b === 0 ? -1 : 1;
+    const startT = 0.35 + b * 0.2;
+    const startY = bottomY - trunkH * startT;
+    const startX = x + swayOffset(tree, 1, time) * startT + Math.sin(leanRad) * trunkH * startT * 0.12;
+    const len = trunkH * (0.28 + b * 0.06) * pulseScale;
+    const angle = side * (0.45 + b * 0.12) + leanRad * 0.3;
+    const endX = startX + Math.cos(angle) * len;
+    const endY = startY + Math.sin(angle) * len * -1;
+    drawBranchSegment(startX, startY, endX, endY, STROKE.medium, PALETTE.accent2, ALPHA.active);
+    branches.push({ x: endX, y: endY });
+
+    const subCount = Math.max(0, Math.floor((branchCount - 2) / mainCount));
+    for (let s = 0; s < subCount; s++) {
+      const subSide = s % 2 === 0 ? 1 : -1;
+      const subLen = len * 0.45;
+      const subAngle = angle + subSide * 0.55;
+      const sx = endX;
+      const sy = endY;
+      const ex = sx + Math.cos(subAngle) * subLen;
+      const ey = sy + Math.sin(subAngle) * subLen * -0.8;
+      drawBranchSegment(sx, sy, ex, ey, STROKE.hair + 0.3, PALETTE.accent2, ALPHA.field + 0.2);
+      branches.push({ x: ex, y: ey });
+    }
+  }
+
+  const canopyGlow = glow * (isHover ? 1.15 : 1);
+  drawCanopyDots(topX, topY - 4, branchCount + 2, canopyGlow, time, tree);
+  branches.forEach((br, i) => drawCanopyDots(br.x, br.y, 3, canopyGlow * 0.8, time + i * 100, tree));
+
+  if (canopyGlow > 0.55) {
+    ctx.beginPath();
+    ctx.arc(topX, topY, 12 * canopyGlow * pulseScale, 0, Math.PI * 2);
+    ctx.fillStyle = PALETTE.glowAlpha;
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  tree._labelX = topX;
+  tree._labelY = topY - 22;
+}
+
+function drawGroundLine() {
+  ctx.beginPath();
+  ctx.moveTo(0, groundY);
+  ctx.lineTo(W, groundY);
+  ctx.strokeStyle = `rgba(46,125,50,${ALPHA.field})`;
+  ctx.lineWidth = STROKE.fine;
+  ctx.stroke();
+}
+
+function drawReferenceLine() {
+  const y = groundY - mapToRange(H, 400, 900, 120, 180);
+  ctx.beginPath();
+  ctx.moveTo(W * 0.08, y);
+  ctx.lineTo(W * 0.92, y);
+  ctx.strokeStyle = `rgba(76,175,80,${ALPHA.bg})`;
+  ctx.lineWidth = STROKE.hair;
+  ctx.setLineDash([4, 8]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawBiolumeLayer(time) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  let glowCount = 0;
+  for (const p of particles) {
+    if (glowCount >= C.MAX_GLOW_ENTITIES) break;
+    const tree = trees.find(t => t.index === p.treeIndex);
+    if (!tree) continue;
+    const drift = Math.sin(time * 0.0004 + p.phase) * 6;
+    const rise = Math.cos(time * 0.00035 + p.phase * 1.1) * 4;
+    const px = p.x + drift;
+    const py = p.y + rise;
+    const pulse = 0.55 + 0.45 * Math.sin(time * 0.002 + p.phase);
+    const r = (2 + p.glowR * 0.08) * pulse * p.factor;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fillStyle = PALETTE.biolume;
+    ctx.globalAlpha = ALPHA.field * p.factor * pulse;
+    ctx.shadowColor = PALETTE.accent3;
+    ctx.shadowBlur = Math.min(p.glowR * pulse, C.GLOW_BLUR_MAX);
+    ctx.fill();
+    glowCount++;
+  }
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawLabels() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  for (const tree of trees) {
+    const lx = tree._labelX ?? tree.x;
+    const ly = tree._labelY ?? tree.topY - 22;
+    ctx.fillStyle = PALETTE.label;
+    ctx.globalAlpha = ALPHA.label;
+    ctx.fillText(tree.name, lx, ly);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawFrame(time) {
+  if (mouseX >= 0) {
+    const hTree = getClosestTree(mouseX, mouseY);
+    hoverIndex = hTree ? hTree.index : -1;
+  }
+
+  drawBackground();
+  drawReferenceLine();
+  drawGroundLine();
+
+  const drawOrder = [...trees].sort((a, b) => b.canopyW - a.canopyW);
+  for (const tree of drawOrder) {
+    drawTree(tree, time);
+  }
+
+  drawBiolumeLayer(time);
+  drawLabels();
+}
+
+function animate(now) {
+  const time = now - startTime;
+  drawFrame(time);
+  animationId = requestAnimationFrame(animate);
+}
+
+async function fetchCityData(city) {
+  const url = `https://api.sunrise-sunset.org/json?lat=${city.lat}&lng=${city.lng}&date=today&formatted=0`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('network');
+  const json = await res.json();
+  if (json.status !== 'OK' || !json.results) throw new Error('api');
+  const r = json.results;
+  return {
+    name: city.name,
+    dayLength: r.day_length,
+    sunrise: r.sunrise,
+    sunset: r.sunset,
+    solarNoon: r.solar_noon,
+    isFallback: false,
+  };
+}
+
+async function loadData() {
+  const fallback = CITIES.map((c, i) => makeFallbackTree(c, i));
+  setTreeData(fallback, false);
+
+  try {
+    const results = await Promise.all(CITIES.map(fetchCityData));
+    setTreeData(results, true);
+  } catch {
+    setTreeData(fallback, false);
+  }
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+  mouseY = e.clientY - rect.top;
+});
+
+canvas.addEventListener('mouseleave', () => {
+  mouseX = -1;
+  mouseY = -1;
+  hoverIndex = -1;
+});
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  handlePointer(e.clientX - rect.left, e.clientY - rect.top);
+});
+
+canvas.addEventListener('touchstart', () => { tapping = true; }, { passive: true });
+
+canvas.addEventListener('touchend', (e) => {
+  if (!tapping) return;
+  tapping = false;
+  const touch = e.changedTouches[0];
+  if (!touch) return;
+  const rect = canvas.getBoundingClientRect();
+  handlePointer(touch.clientX - rect.left, touch.clientY - rect.top);
+  e.preventDefault();
+}, { passive: false });
+
+window.addEventListener('resize', () => {
+  resize();
+  drawFrame(performance.now() - startTime);
+});
+
+resize();
+setTreeData(CITIES.map((c, i) => makeFallbackTree(c, i)), false);
+updateHeroAverage();
+loadData();
+animationId = requestAnimationFrame(animate);
+</script>
+</body>
+</html>
