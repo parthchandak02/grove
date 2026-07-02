@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>grove — bioluminescent daylight forest</title>
+<title>grove - bioluminescent daylight forest</title>
 <style>
 :root {
   --motion-fast: 160ms;
@@ -209,7 +209,7 @@ html, body {
 
 <div id="chrome">
   <div id="hero">
-    <div id="hero-value">—</div>
+    <div id="hero-value">-</div>
     <div id="hero-label">hours of daylight</div>
   </div>
 
@@ -227,7 +227,7 @@ html, body {
   </div>
 
   <div id="desc">Five world cities grow as bioluminescent trees, shaped by today's real sunlight</div>
-  <div id="data-stamp">Sunrise-Sunset API · updated — · fallback</div>
+  <div id="data-stamp">Sunrise-Sunset API · updated - · fallback</div>
 </div>
 
 <script>
@@ -306,11 +306,11 @@ function formatHoursMin(seconds) {
 }
 
 function formatTime(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   } catch {
-    return '—';
+    return '-';
   }
 }
 
@@ -454,7 +454,7 @@ function setTreeData(rawTrees, live) {
 function updateDataStamp() {
   const timeStr = lastUpdated
     ? lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    : '—';
+    : '-';
   const mode = isLive ? 'live' : 'fallback';
   dataStamp.textContent = `Sunrise-Sunset API · updated ${timeStr} · ${mode}`;
 }
