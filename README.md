@@ -55,7 +55,7 @@ to `live` only when all five cities return.
 
 <div align="center">
 
-<img src="docs/assets/readme/tap-panel.jpg" width="720" alt="A dark green panel over the forest reading Sydney, 13h 10m, with sunrise, solar noon and sunset times and the line How much daylight Sydney gets today">
+<img src="docs/assets/readme/tap-panel.jpg" width="720" alt="A dark green panel over the forest reading Sydney, 13h 12m, with sunrise, solar noon and sunset times and the line How much daylight Sydney gets today">
 
 <sub>The panel after tapping Sydney. Live data; times are shown in the city's own timezone.</sub>
 
