@@ -281,11 +281,11 @@ const STROKE = { hair: 0.5, fine: 1, medium: 2, heavy: 4 };
 const ALPHA = { bg: 0.08, field: 0.25, active: 0.7, label: 0.45 };
 
 const CITIES = [
-  { name: 'San Francisco', lat: 37.7749, lng: -122.4194, fallbackDayLength: 50400 },
-  { name: 'Tokyo', lat: 35.6762, lng: 139.6503, fallbackDayLength: 36000 },
-  { name: 'London', lat: 51.5074, lng: -0.1278, fallbackDayLength: 57600 },
-  { name: 'Sydney', lat: -33.8688, lng: 151.2093, fallbackDayLength: 36000 },
-  { name: 'Dubai', lat: 25.2048, lng: 55.2708, fallbackDayLength: 46800 },
+  { name: 'San Francisco', tz: 'America/Los_Angeles', lat: 37.7749, lng: -122.4194, fallbackDayLength: 50400 },
+  { name: 'Tokyo', tz: 'Asia/Tokyo', lat: 35.6762, lng: 139.6503, fallbackDayLength: 36000 },
+  { name: 'London', tz: 'Europe/London', lat: 51.5074, lng: -0.1278, fallbackDayLength: 57600 },
+  { name: 'Sydney', tz: 'Australia/Sydney', lat: -33.8688, lng: 151.2093, fallbackDayLength: 36000 },
+  { name: 'Dubai', tz: 'Asia/Dubai', lat: 25.2048, lng: 55.2708, fallbackDayLength: 46800 },
 ];
 
 function mapToRange(value, inMin, inMax, outMin, outMax) {
@@ -305,30 +305,46 @@ function formatHoursMin(seconds) {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-function formatTime(iso) {
+function formatTime(iso, tz) {
   if (!iso) return '-';
   try {
-    return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: tz });
   } catch {
     return '-';
   }
 }
 
-function solarHour(iso) {
-  const d = new Date(iso);
-  return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+// Wall-clock parts of a moment in the city's own time zone (not the viewer's)
+function zonedParts(date, tz) {
+  const parts = {};
+  new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(date).forEach((p) => { parts[p.type] = Number(p.value); });
+  return parts;
+}
+
+function zonedDate(tz) {
+  const p = zonedParts(new Date(), tz);
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+}
+
+function solarHour(iso, tz) {
+  const p = zonedParts(new Date(iso), tz);
+  return p.hour + p.minute / 60 + p.second / 3600;
 }
 
 function makeFallbackTree(city, index) {
   const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  const sunrise = new Date(y, m, d, 6, 15 + index * 8, 0);
+  const p = zonedParts(now, city.tz);
+  const offsetMs = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(now.getTime() / 1000) * 1000;
+  const sunrise = new Date(Date.UTC(p.year, p.month - 1, p.day, 6, 15 + index * 8, 0) - offsetMs);
   const sunset = new Date(sunrise.getTime() + city.fallbackDayLength * 1000);
   const solarNoon = new Date(sunrise.getTime() + city.fallbackDayLength * 500);
   return {
     name: city.name,
+    tz: city.tz,
     dayLength: city.fallbackDayLength,
     sunrise: sunrise.toISOString(),
     sunset: sunset.toISOString(),
@@ -379,7 +395,7 @@ function computeTreeMetrics(tree, index) {
   const sunsetMs = new Date(tree.sunset).getTime();
   const daylightDuration = Math.max(0, (sunsetMs - sunriseMs) / 1000);
   const branchCount = Math.round(mapToRange(daylightDuration, C.BRANCH_IN_MIN, C.BRANCH_IN_MAX, C.BRANCH_COUNT_MIN, C.BRANCH_COUNT_MAX));
-  const leanDeg = mapToRange(solarHour(tree.solarNoon), C.LEAN_IN_MIN, C.LEAN_IN_MAX, C.LEAN_DEG_MIN, C.LEAN_DEG_MAX);
+  const leanDeg = mapToRange(solarHour(tree.solarNoon, tree.tz), C.LEAN_IN_MIN, C.LEAN_IN_MAX, C.LEAN_DEG_MIN, C.LEAN_DEG_MAX);
   const canopyW = 20 + branchCount * 8;
   const bottomY = groundY;
   const topY = bottomY - trunkH;
@@ -475,9 +491,9 @@ function showQuietZone(tree) {
   qzCity.textContent = tree.name;
   qzDay.textContent = formatDuration(tree.dayLength);
   qzTimes.innerHTML =
-    `Sunrise ${formatTime(tree.sunrise)}<br>` +
-    `Solar noon ${formatTime(tree.solarNoon)}<br>` +
-    `Sunset ${formatTime(tree.sunset)}`;
+    `Sunrise ${formatTime(tree.sunrise, tree.tz)}<br>` +
+    `Solar noon ${formatTime(tree.solarNoon, tree.tz)}<br>` +
+    `Sunset ${formatTime(tree.sunset, tree.tz)}`;
   qzDesc.textContent = `How much daylight ${tree.name} gets today`;
   idleTimer = setTimeout(() => quietZone.classList.add('idle-fade'), C.IDLE_FADE_MS);
 }
@@ -779,7 +795,7 @@ function animate(now) {
 }
 
 async function fetchCityData(city) {
-  const url = `https://api.sunrise-sunset.org/json?lat=${city.lat}&lng=${city.lng}&date=today&formatted=0`;
+  const url = `https://api.sunrise-sunset.org/json?lat=${city.lat}&lng=${city.lng}&date=${zonedDate(city.tz)}&formatted=0`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('network');
   const json = await res.json();
@@ -787,6 +803,7 @@ async function fetchCityData(city) {
   const r = json.results;
   return {
     name: city.name,
+    tz: city.tz,
     dayLength: r.day_length,
     sunrise: r.sunrise,
     sunset: r.sunset,

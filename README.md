@@ -44,7 +44,7 @@ the average day length across all five. No API key is needed.
 |---|---|
 | `day_length` | Trunk height: 8 h maps to 80 px, 16 h to 200 px |
 | `sunset` minus `sunrise` | Branch count: 12 h gives 2 branches, 16 h gives 6 |
-| `solar_noon` | Trunk lean, -5° to +5°, read as a clock time in the viewer's timezone |
+| `solar_noon` | Trunk lean, -5° to +5°, read as a clock time in the city's own timezone |
 | Time now, between sunrise and sunset | Glow and particle count: dim at night, brightest at solar noon |
 
 Trees sway on a slow sine wave and pulse once each on first load. Until the API answers, the
@@ -57,7 +57,7 @@ to `live` only when all five cities return.
 
 <img src="docs/assets/readme/tap-panel.jpg" width="720" alt="A dark green panel over the forest reading Sydney, 13h 10m, with sunrise, solar noon and sunset times and the line How much daylight Sydney gets today">
 
-<sub>The panel after tapping Sydney. Live data; times are shown in the viewer's timezone.</sub>
+<sub>The panel after tapping Sydney. Live data; times are shown in the city's own timezone.</sub>
 
 </div>
 
